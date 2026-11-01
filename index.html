@@ -1,1 +1,151 @@
 
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#111318">
+<title>Push Pull Tracker</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:20px 15px 45px;background:#111318;color:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
+h1{font-size:27px;margin:10px 0 5px}
+h2{font-size:19px;margin:0 0 14px}
+.sub,.muted{color:#999;font-size:13px}
+.card{background:#1c2028;border:1px solid #343b48;border-radius:15px;padding:16px;margin:15px 0}
+label{display:block;color:#aaa;font-size:13px;margin:13px 0 6px}
+select,input{width:100%;padding:12px;background:#11151c;border:1px solid #414957;border-radius:9px;color:white;font-size:16px}
+.exercise{padding:14px 0;border-bottom:1px solid #343b48}
+.exercise:last-child{border:0}
+.exercise h3{font-size:16px;margin:0 0 5px}
+.sets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.sets small{display:block;color:#aaa;font-size:11px;margin-bottom:5px}
+.sets input{padding:10px 3px;text-align:center;font-size:15px}
+button{border:0;border-radius:10px;padding:13px 15px;font-size:15px;font-weight:650}
+.primary{background:#e34b43;color:white;width:100%;margin-top:14px}
+.secondary{background:#303744;color:white;flex:1}
+.actions{display:flex;gap:9px}
+.compare{background:#252c37;border-radius:10px;padding:12px;margin-top:13px;font-size:13px;line-height:1.6}
+.stat{font-size:27px;font-weight:750}
+.progress{height:8px;background:#343a45;border-radius:9px;margin-top:10px;overflow:hidden}
+.bar{height:100%;background:#e34b43;width:0}
+#status{color:#9bd6a4;text-align:center;font-size:13px;margin-top:10px}
+</style>
+</head>
+<body>
+<h1>Push / Pull Tracker</h1>
+<div class="sub">Dein Training. Dein Fortschritt.</div>
+
+<div class="card">
+<label>Trainingseinheit</label>
+<select id="session"></select>
+<label>Trainingsdatum</label>
+<input id="date" type="date">
+<div class="compare" id="comparison">Wähle eine Trainingseinheit.</div>
+</div>
+
+<div class="card">
+<h2>Trainingsprotokoll</h2>
+<div id="exercises"></div>
+<button class="primary" onclick="saveSession()">Training speichern</button>
+<div id="status"></div>
+</div>
+
+<div class="card">
+<h2>Fortschritt</h2>
+<div class="stat" id="completed">0 / 24</div>
+<div class="muted">gespeicherte Trainingseinheiten</div>
+<div class="progress"><div class="bar" id="bar"></div></div>
+<div id="overview" class="muted" style="margin-top:14px"></div>
+</div>
+
+<div class="card">
+<h2>Daten sichern</h2>
+<div class="actions">
+<button class="secondary" onclick="exportCSV()">CSV exportieren</button>
+<button class="secondary" onclick="resetAll()">Zurücksetzen</button>
+</div>
+<p class="muted">Speicherung auf diesem Gerät im Browser. Regelmäßig CSV-Sicherungen exportieren.</p>
+</div>
+
+<script>
+const plans={
+"Push A":[["Bankdrücken Langhantel","5–8"],["Kniebeugen","6–10"],["Schulterdrücken Kurzhantel","8–10"],["Schrägbankdrücken","8–12"],["Seitheben","12–20"],["Trizepsdrücken Kabel","10–15"]],
+"Pull A":[["Kreuzheben","5–6"],["Klimmzüge","6–10"],["Brustgestütztes Rudern","8–12"],["Beinbeuger","10–15"],["Face Pulls","12–20"],["Bizepscurls","8–12"]],
+"Push B":[["Beinpresse","10–12"],["Schrägbankdrücken Kurzhantel","8–12"],["Brustpresse","10–12"],["Beinstrecker","12–15"],["Seitheben Kabel","12–20"],["Trizepsstrecken über Kopf Kabel","10–15"]],
+"Pull B":[["Rumänisches Kreuzheben","8–10"],["Latzug enger Neutralgriff","8–12"],["Einarmiges Kabelrudern","10–12"],["Hip Thrust","8–12"],["Reverse Flyes","12–20"],["Hammercurls","10–12"],["Wadenheben","12–15"]]
+};
+const names=Object.keys(plans);
+const sessions=names.flatMap(n=>Array.from({length:6},(_,i)=>({name:n,label:n+" – Einheit "+(i+1)})));
+let data={};
+try{data=JSON.parse(localStorage.getItem("ppt-data")||"{}")}catch(e){data={}}
+const $=id=>document.getElementById(id);
+function persist(){localStorage.setItem("ppt-data",JSON.stringify(data))}
+function init(){
+$("session").innerHTML=sessions.map((s,i)=>`<option value="${i}">${s.label}</option>`).join("");
+$("date").value=new Date().toISOString().slice(0,10);
+$("session").onchange=render;
+render();stats();
+}
+function render(){
+let id=+$("session").value||0,s=sessions[id],saved=data[id]||{};
+$("date").value=saved.date||new Date().toISOString().slice(0,10);
+$("exercises").innerHTML=plans[s.name].map((e,i)=>{
+let sets=saved.exercises?.[i]||[];
+return `<div class="exercise"><h3>${e[0]}</h3><div class="muted">Ziel: ${e[1]} Wiederholungen</div><div class="sets">${[0,1,2].map(j=>`<div><small>Satz ${j+1} · kg / Wdh.</small><input inputmode="decimal" placeholder="kg" id="w-${i}-${j}" value="${sets[j]?.w||""}"><input inputmode="numeric" placeholder="Wdh." id="r-${i}-${j}" value="${sets[j]?.r||""}" style="margin-top:6px"></div>`).join("")}</div></div>`;
+}).join("");
+comparison();
+}
+function readSets(){
+let id=+$("session").value||0;
+return plans[sessions[id].name].map((e,i)=>[0,1,2].map(j=>({w:$(`w-${i}-${j}`).value,r:$(`r-${i}-${j}`).value})));
+}
+function saveSession(){
+let id=+$("session").value||0;
+data[id]={date:$("date").value,exercises:readSets(),done:true};
+persist();stats();comparison();
+$("status").textContent="Training gespeichert ✓";
+}
+function previous(){
+let id=+$("session").value||0,name=sessions[id].name;
+let ids=Object.keys(data).map(Number).filter(i=>i!==id&&sessions[i].name===name&&data[i]?.done);
+ids.sort((a,b)=>(data[b].date||"").localeCompare(data[a].date||""));
+return ids.length?data[ids[0]]:null;
+}
+function comparison(){
+let p=previous(),id=+$("session").value||0;
+if(!p){$("comparison").textContent="Noch kein früheres Training dieser Art zum Vergleichen vorhanden.";return}
+let lines=[];
+plans[sessions[id].name].forEach((e,i)=>{
+let sets=p.exercises?.[i]||[];
+let values=sets.filter(x=>x.w||x.r).map(x=>(x.w||"–")+" kg × "+(x.r||"–")+" Wdh.");
+if(values.length)lines.push("<b>"+e[0]+":</b> "+values.join(" · "));
+});
+$("comparison").innerHTML="<b>Letztes Training dieser Art</b><br>"+(p.date||"")+(lines.length?"<br>"+lines.join("<br>"):"<br>Keine Satzdaten vorhanden.");
+}
+function stats(){
+let count=Object.values(data).filter(x=>x.done).length;
+$("completed").textContent=count+" / 24";
+$("bar").style.width=(count/24*100)+"%";
+$("overview").innerHTML=names.map(n=>{
+let c=sessions.filter((s,i)=>s.name===n&&data[i]?.done).length;
+return `<div style="margin-top:9px">${n}: <b>${c} / 6</b></div>`;
+}).join("");
+}
+function exportCSV(){
+let rows=[["Einheit","Datum","Übung","Satz","Gewicht kg","Wiederholungen"]];
+sessions.forEach((s,i)=>{
+let d=data[i];if(!d)return;
+plans[s.name].forEach((e,j)=>(d.exercises?.[j]||[]).forEach((set,k)=>rows.push([s.label,d.date,e[0],k+1,set.w,set.r])));
+});
+let csv=rows.map(r=>r.map(v=>'"'+String(v??"").replaceAll('"','""')+'"').join(";")).join("\n");
+let blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
+let a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="push-pull-training.csv";a.click();
+}
+function resetAll(){
+if(confirm("Alle Trainingsdaten löschen?")){data={};persist();render();stats();$("status").textContent="Daten gelöscht."}
+}
+init();
+</script>
+</body>
+</html>
